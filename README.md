@@ -2,8 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![MCP Specification](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
-[![Maintainer](https://img.shields.io/badge/developer-chriz--3656-orange.svg)](https://github.com/chriz-3656)
+[![PyPI](https://img.shields.io/pypi/v/pencil2d-mcp.svg)](https://pypi.org/project/pencil2d-mcp/)
+[![Website](https://img.shields.io/badge/Showcase-Website-orange.svg)](https://github.com/chriz-3656/pencil2d-mcp-web)
+[![Maintainer](https://img.shields.io/badge/developer-chriz--3656-blue.svg)](https://github.com/chriz-3656)
 
 An open-source **Model Context Protocol (MCP)** server and automation toolkit that empowers AI agents (Claude Desktop, Google Antigravity, Cursor, Cline, etc.) to programmatically create, inspect, edit, and render traditional 2D hand-drawn animations using **[Pencil2D](https://www.pencil2d.org/)**.
 
