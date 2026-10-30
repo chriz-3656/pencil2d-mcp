@@ -155,8 +155,14 @@ python -m unittest discover tests
 
 ---
 
+## 💬 Note from the Developer
+
+> *"This is my first time building an MCP server as a 20-year-old solo developer! If you encounter any bugs, issues, or have feedback, please reach out directly at **[chrizmonsaji@proton.me](mailto:chrizmonsaji@proton.me)** or [open an issue on GitHub](https://github.com/chriz-3656/pencil2d-mcp/issues). Every piece of feedback helps!"*
+
+---
+
 ## 📜 License
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 
-Maintained with ❤️ by **[chriz-3656](https://github.com/chriz-3656)**.
+Maintained with ❤️ by **[chriz-3656](https://github.com/chriz-3656)** • Contact: [chrizmonsaji@proton.me](mailto:chrizmonsaji@proton.me).
