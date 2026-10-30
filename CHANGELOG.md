@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-30
+
+### Added
+- **Pure-Python Fallback Compositor**: Direct rendering of `.pclx` projects to animated GIF (`export_gif`), single frames (`render_frame`), and PNG sequences (`export_sequence`) using Pillow without needing the Pencil2D AppImage binary.
+- **Headless Auto-Detection**: Automatically detects headless environments (missing `DISPLAY`) and wraps CLI export commands with `xvfb-run -a` when available.
+- **`export_project` Enhancements**: Added `fps` override, configurable `timeout` (default 180s), and `force_pure_python` flag.
+- **Detached GUI Process Lifetime**: `launch_gui` now runs with `start_new_session=True` so GUI windows remain open and detached on the desktop screen.
+- **API Ergonomics & Aliases**:
+  - `Pencil2DProject.create(file_path, width, height, fps, layer_names)` factory method.
+  - `proj.validate()` alias for `proj.validate_integrity()`.
+  - `render_animation` alias for `export_project`.
+- **Dynamic Layer Auto-Creation**: `add_frame_image` and `pencil2d_add_frames_batch` automatically create missing bitmap layers when `auto_create_layer=True`.
+- **Preserved Layer Stack Order**: Layer insertion in project creation now strictly preserves the declared input order.
+- **CLI Flags**: Added `--fps`, `--timeout`, and `--pure-python` flags to the `pencil2d-mcp export` command.
+
 ## [0.2.0] - 2026-10-30
 
 ### Added

@@ -13,7 +13,7 @@ An open-source **Model Context Protocol (MCP)** server and automation toolkit th
 ## ✨ Features
 
 - **⚡ Zero Heavyweight Runtime Dependencies**: Pure Python implementation with standard library + Pillow.
-- **🎬 Native Headless Rendering**: Leverages Pencil2D AppImage CLI to render animations directly to **MP4 (H.264)**, **animated GIF**, **WebM**, or **PNG image sequences**.
+- **🎬 Headless & Pure-Python Dual Rendering**: Leverages Pencil2D AppImage CLI or built-in pure-Python Pillow fallback to render animations to **MP4 (H.264)**, **animated GIF**, or **PNG image sequences**—even in headless environments without an X server.
 - **🎨 Complete Project (.pclx) Support**: Read, construct, and modify native `.pclx` archives, layer structures (Bitmap, Vector, Sound, Camera, Palette), frame timings, and camera transformations.
 - **⚡ Batch Frame Operations**: Import whole animations from directories or structured lists in a single operation.
 - **🔊 Sound & Audio Integration**: Embed voiceovers and sound effects (WAV/MP3) directly into sound layers.
@@ -34,7 +34,7 @@ Every tool is exposed as a first-class AI tool over MCP:
 | **`pencil2d_inspect`** | `project_path` | Inspect a `.pclx` project file to inspect canvas resolution, framerate (FPS), total keyframes, layer breakdown, and color palette. |
 | **`pencil2d_create`** | `project_path`, `width`, `height`, `fps`, `layer_names` | Create a fresh, valid `.pclx` project ready for drawing keyframes. |
 | **`pencil2d_add_frame`** | `project_path`, `frame`, `image_path` / `base64_data`, `layer_name`, `top_left_x`, `top_left_y` | Insert or replace an animation frame in a bitmap layer using an image file or base64 data. |
-| **`pencil2d_add_frames_batch`** | `project_path`, `frames` *(list)*, `directory_path` *(str)*, `layer_name`, `start_frame`, `step` | Batch import multiple animation frames from a folder or list in a single call. |
+| **`pencil2d_add_frames_batch`** | `project_path`, `frames` *(list)*, `directory_path` *(str)*, `layer_name`, `start_frame`, `step`, `auto_create_layers` | Batch import multiple animation frames from a folder or list in a single call with auto-layer creation. |
 | **`pencil2d_add_layer`** | `project_path`, `name`, `layer_type` *(bitmap, vector, sound, camera)*, `visible` | Add a new layer to the project timeline. |
 | **`pencil2d_remove_layer`** | `project_path`, `layer_name_or_id` | Delete a layer and its keyframes from the project. |
 | **`pencil2d_add_audio`** | `project_path`, `audio_path`, `frame`, `layer_name` | Embed an audio track/clip (WAV/MP3) into a sound layer at a specific keyframe. |
@@ -43,7 +43,7 @@ Every tool is exposed as a first-class AI tool over MCP:
 | **`pencil2d_create_spritesheet`** | `project_path`, `output_image`, `layer_name`, `columns` | Pack animated frames into a sprite sheet with coordinate grid metadata. |
 | **`pencil2d_validate`** | `project_path` | Deep project integrity test checking XML syntax, asset references, and frame continuity. |
 | **`pencil2d_extract_frames`** | `project_path`, `output_dir` | Unpack all PNG frames from a `.pclx` file into a directory for AI inspection or external editing. |
-| **`pencil2d_export`** | `project_path`, `output_path`, `width`, `height`, `start_frame`, `end_frame`, `transparency`, `camera` | Headlessly render an animation project to video (MP4), animated GIF, WebM, or PNG sequence. |
+| **`pencil2d_export`** | `project_path`, `output_path`, `width`, `height`, `fps`, `start_frame`, `end_frame`, `transparency`, `camera`, `timeout`, `force_pure_python` | Headlessly render an animation project to video (MP4), animated GIF, or PNG sequence (via AppImage CLI or pure-Python fallback). |
 | **`pencil2d_launch_gui`** | `project_path` | Open the project in the visual Pencil2D GUI for interactive editing. |
 
 ---
@@ -134,9 +134,9 @@ pencil2d-mcp check
 # Inspect a .pclx project
 pencil2d-mcp inspect animation.pclx
 
-# Headlessly export animation to MP4 or GIF
-pencil2d-mcp export animation.pclx -o output.mp4
-pencil2d-mcp export animation.pclx -o preview.gif --width 800 --height 600
+# Headlessly export animation to MP4 or GIF (supports AppImage CLI or pure-Python fallback)
+pencil2d-mcp export animation.pclx -o output.mp4 --fps 24
+pencil2d-mcp export animation.pclx -o preview.gif --width 800 --height 600 --pure-python
 
 # Open project in GUI
 pencil2d-mcp gui animation.pclx

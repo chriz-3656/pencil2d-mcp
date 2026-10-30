@@ -2,7 +2,7 @@
   "$schema": "https://modelcontextprotocol.io/schema/mcp-server.json",
   "name": "pencil2d-mcp",
   "description": "Model Context Protocol (MCP) server for Pencil2D traditional 2D animation creation and rendering",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "chriz-3656",
   "license": "MIT",
   "repository": {
