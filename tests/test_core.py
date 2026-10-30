@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from pencil2d_mcp.core import Pencil2DProject, get_appimage_path
 
@@ -29,7 +29,6 @@ class TestPencil2DProject(unittest.TestCase):
 
     def test_roundtrip_load(self):
         proj = Pencil2DProject(width=1000, height=800, fps=15)
-        # Create a test image
         img = Image.new("RGBA", (1000, 800), (255, 0, 0, 255))
         proj.add_frame_image("Bitmap Layer", 1, img)
         proj.save(self.project_path)
@@ -48,9 +47,45 @@ class TestPencil2DProject(unittest.TestCase):
         self.assertIn(1, bitmap_layer["frames"])
         self.assertGreater(len(bitmap_layer["frames"][1]["bytes"]), 0)
 
+    def test_layer_management(self):
+        proj = Pencil2DProject()
+        lid = proj.add_layer("Ink Layer", layer_type="bitmap")
+        self.assertTrue(any(l["id"] == lid for l in proj.layers))
+
+        removed = proj.remove_layer("Ink Layer")
+        self.assertTrue(removed)
+        self.assertFalse(any(l["name"] == "Ink Layer" for l in proj.layers))
+
+    def test_camera_and_palette(self):
+        proj = Pencil2DProject()
+        proj.set_camera_keyframe(frame_num=5, dx=50.0, dy=-20.0, scale=1.2, rotation=5.0)
+        cam_layer = [l for l in proj.layers if l["type"] == 5][0]
+        self.assertIn(5, cam_layer["frames"])
+        self.assertEqual(cam_layer["frames"][5]["s"], 1.2)
+
+        proj.add_palette_color("SkinTone", 240, 200, 180)
+        self.assertTrue(any(c["name"] == "SkinTone" for c in proj.palette))
+
+    def test_spritesheet_generation(self):
+        proj = Pencil2DProject(width=100, height=100)
+        img1 = Image.new("RGBA", (100, 100), (255, 0, 0, 255))
+        img2 = Image.new("RGBA", (100, 100), (0, 255, 0, 255))
+        proj.add_frame_image("Bitmap Layer", 1, img1)
+        proj.add_frame_image("Bitmap Layer", 2, img2)
+
+        sheet_out = os.path.join(self.test_dir, "sheet.png")
+        res = proj.generate_spritesheet(sheet_out, columns=2)
+        self.assertTrue(os.path.exists(sheet_out))
+        self.assertEqual(res["total_frames"], 2)
+        self.assertEqual(res["columns"], 2)
+
+    def test_validation(self):
+        proj = Pencil2DProject()
+        val = proj.validate_integrity()
+        self.assertTrue(val["is_valid"])
+
     def test_appimage_detection(self):
         path = get_appimage_path()
-        # Even if not present in all test runner environments, function should return str or None
         self.assertTrue(path is None or isinstance(path, str))
 
 if __name__ == "__main__":

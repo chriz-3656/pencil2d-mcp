@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-30
+
+### Added
+- **`pencil2d_add_frames_batch` tool**: Batch insert animation keyframes into projects from structured lists or directories in a single operation.
+- **`pencil2d_add_layer` tool**: Dynamically create new Bitmap, Vector, Sound, or Camera layers.
+- **`pencil2d_remove_layer` tool**: Delete layers by name or ID.
+- **`pencil2d_add_audio` tool**: Embed audio clips (WAV/MP3) into sound layers at specific keyframes.
+- **`pencil2d_set_camera` tool**: Keyframe camera pan (dx, dy), zoom/scale, and rotation angles.
+- **`pencil2d_manage_palette` tool**: Add or update color swatches in the project palette.
+- **`pencil2d_create_spritesheet` tool**: Pack animation frames into a sprite sheet with coordinate grid metadata.
+- **`pencil2d_validate` tool**: Project integrity and diagnostic checker detecting missing frames, broken XML references, and layer structure errors.
+- Enhanced `Pencil2DProject` core with audio embedding, spritesheet generator, and validation methods.
+
 ## [0.1.0] - 2026-10-30
 
 ### Added
@@ -17,4 +30,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`pencil2d_launch_gui` tool**: Launch projects directly in the interactive Pencil2D GUI.
 - **Core Library (`pencil2d_mcp.core`)**: Python OOP interface (`Pencil2DProject`) for reading, modifying, and writing .pclx archives without requiring GUI dependencies.
 - **CLI Utility (`pencil2d-mcp`)**: Command-line tool to test, inspect, run, and export animations.
-- Complete documentation, configuration examples for Claude Desktop, Antigravity, and Cursor, issue templates, and CI workflows.

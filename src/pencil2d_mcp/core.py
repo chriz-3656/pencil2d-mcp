@@ -1,6 +1,7 @@
 """Pencil2D Core Module: Direct manipulation of .pclx project archives and CLI/GUI interactions."""
 
 import io
+import math
 import os
 import shutil
 import subprocess
@@ -31,7 +32,6 @@ def get_appimage_path() -> Optional[str]:
         if os.path.exists(candidate) and os.access(candidate, os.X_OK):
             return os.path.abspath(candidate)
 
-    # Check for any pencil2d*.AppImage in ~/Downloads or /tmp
     search_dirs = [
         os.path.expanduser("~/Downloads"),
         "/home/demo/Downloads",
@@ -207,7 +207,18 @@ class Pencil2DProject:
                         for s_elem in layer_el.findall("sound"):
                             f_idx = int(s_elem.attrib.get("frame", 1))
                             src = s_elem.attrib.get("src", "")
-                            layer_dict["frames"][f_idx] = {"src": src}
+                            name = s_elem.attrib.get("name", "Audio")
+                            s_data = b""
+                            if src:
+                                try:
+                                    s_data = zf.read(f"data/{src}")
+                                except KeyError:
+                                    pass
+                            layer_dict["frames"][f_idx] = {
+                                "src": src,
+                                "name": name,
+                                "bytes": s_data
+                            }
 
                     proj.layers.append(layer_dict)
 
@@ -287,10 +298,15 @@ class Pencil2DProject:
             elif l["type"] == 4: # Sound
                 l_el = ET.SubElement(obj_el, "layer", layer_attrib)
                 for f_idx, frame_data in sorted(l["frames"].items()):
+                    src_filename = frame_data.get("src") or f"audio_{l['id']}_{f_idx:03d}.wav"
+                    name = frame_data.get("name", "Audio")
                     ET.SubElement(l_el, "sound", {
                         "frame": str(f_idx),
-                        "src": frame_data.get("src", "")
+                        "name": name,
+                        "src": src_filename
                     })
+                    if "bytes" in frame_data and frame_data["bytes"]:
+                        file_assets[f"data/{src_filename}"] = frame_data["bytes"]
 
         xml_str = ET.tostring(doc, encoding="utf-8")
         full_xml = b'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE PencilDocument>\n' + xml_str
@@ -325,6 +341,59 @@ class Pencil2DProject:
             "frames": {}
         })
         return lid
+
+    def add_sound_layer(self, name: str = "Sound Layer") -> int:
+        """Create a new sound layer and return its ID."""
+        lid = self.next_layer_id
+        self.next_layer_id += 1
+        self.layers.append({
+            "id": lid,
+            "name": name,
+            "type": 4,
+            "visible": True,
+            "frames": {}
+        })
+        return lid
+
+    def add_layer(self, name: str, layer_type: Union[int, str] = 1, visible: bool = True) -> int:
+        """Add any layer type: 1: Bitmap, 2: Vector, 4: Sound, 5: Camera."""
+        type_map = {
+            "bitmap": 1,
+            "vector": 2,
+            "sound": 4,
+            "audio": 4,
+            "camera": 5
+        }
+        if isinstance(layer_type, str):
+            ltype = type_map.get(layer_type.lower(), 1)
+        else:
+            ltype = int(layer_type)
+
+        lid = self.next_layer_id
+        self.next_layer_id += 1
+
+        new_layer = {
+            "id": lid,
+            "name": name,
+            "type": ltype,
+            "visible": visible,
+            "frames": {}
+        }
+        if ltype == 5:
+            new_layer["width"] = self.width
+            new_layer["height"] = self.height
+            new_layer["frames"][1] = {"r": 0.0, "s": 1.0, "dx": 0.0, "dy": 0.0}
+
+        self.layers.insert(0, new_layer)
+        return lid
+
+    def remove_layer(self, layer_id_or_name: Any) -> bool:
+        """Remove a layer by its ID or name."""
+        for i, l in enumerate(self.layers):
+            if l["id"] == layer_id_or_name or l["name"] == layer_id_or_name:
+                self.layers.pop(i)
+                return True
+        return False
 
     def add_frame_image(self, layer_id_or_name: Any, frame_num: int,
                          image_bytes_or_path: Union[str, bytes, Image.Image],
@@ -372,6 +441,74 @@ class Pencil2DProject:
             "opacity": 1.0
         }
 
+    def add_audio_clip(self, audio_path: str, frame_num: int = 1, layer_name_or_id: Optional[Any] = None) -> bool:
+        """Add an audio file to a sound layer at a specific keyframe."""
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+        target_layer = None
+        for l in self.layers:
+            if l["type"] == 4:
+                if layer_name_or_id is None or l["id"] == layer_name_or_id or l["name"] == layer_name_or_id:
+                    target_layer = l
+                    break
+
+        if target_layer is None:
+            lid = self.add_sound_layer("Sound Layer")
+            target_layer = [l for l in self.layers if l["id"] == lid][0]
+
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        base_fn = os.path.basename(audio_path)
+        src_fn = f"sound_{target_layer['id']}_{frame_num:03d}_{base_fn}"
+
+        target_layer["frames"][frame_num] = {
+            "name": os.path.splitext(base_fn)[0],
+            "src": src_fn,
+            "bytes": audio_bytes
+        }
+        return True
+
+    def set_camera_keyframe(self, frame_num: int = 1, dx: float = 0.0, dy: float = 0.0,
+                             scale: float = 1.0, rotation: float = 0.0,
+                             layer_name_or_id: Optional[Any] = None):
+        """Set a camera keyframe with translation, zoom (scaling), and rotation."""
+        cam_layer = None
+        for l in self.layers:
+            if l["type"] == 5:
+                if layer_name_or_id is None or l["id"] == layer_name_or_id or l["name"] == layer_name_or_id:
+                    cam_layer = l
+                    break
+
+        if cam_layer is None:
+            lid = self.add_layer("Camera Layer", layer_type=5)
+            cam_layer = [l for l in self.layers if l["id"] == lid][0]
+
+        cam_layer["frames"][frame_num] = {
+            "dx": float(dx),
+            "dy": float(dy),
+            "s": float(scale),
+            "r": float(rotation),
+        }
+
+    def add_palette_color(self, name: str, red: int, green: int, blue: int, alpha: int = 255):
+        """Add or update a color in the project palette."""
+        for c in self.palette:
+            if c["name"].lower() == name.lower():
+                c["red"] = red
+                c["green"] = green
+                c["blue"] = blue
+                c["alpha"] = alpha
+                return
+        self.palette.append({
+            "name": name,
+            "red": red,
+            "green": green,
+            "blue": blue,
+            "alpha": alpha
+        })
+
     def inspect_summary(self) -> Dict[str, Any]:
         """Return structural metadata and keyframe summary."""
         layer_summaries = []
@@ -403,6 +540,102 @@ class Pencil2DProject:
             "max_frame": max_frame,
             "layers": layer_summaries,
             "palette_colors_count": len(self.palette),
+        }
+
+    def validate_integrity(self) -> Dict[str, Any]:
+        """Deep sanity verification of project integrity and missing asset checks."""
+        issues = []
+        warnings = []
+
+        if not self.layers:
+            issues.append("Project contains no layers.")
+
+        camera_layers = [l for l in self.layers if l["type"] == 5]
+        if not camera_layers:
+            warnings.append("Project has no camera layer; default canvas framing will be used.")
+
+        bitmap_layers = [l for l in self.layers if l["type"] == 1]
+        sound_layers = [l for l in self.layers if l["type"] == 4]
+
+        total_bitmap_frames = sum(len(l["frames"]) for l in bitmap_layers)
+        if not bitmap_layers or total_bitmap_frames == 0:
+            warnings.append("Project contains no bitmap keyframes.")
+
+        # Check for empty frames
+        for l in bitmap_layers:
+            for f_idx, f_data in l["frames"].items():
+                if not f_data.get("bytes"):
+                    issues.append(f"Layer '{l['name']}' frame {f_idx} has empty image data.")
+
+        return {
+            "status": "valid" if not issues else "invalid",
+            "is_valid": len(issues) == 0,
+            "errors": issues,
+            "warnings": warnings,
+            "metrics": {
+                "layers_count": len(self.layers),
+                "bitmap_layers": len(bitmap_layers),
+                "sound_layers": len(sound_layers),
+                "camera_layers": len(camera_layers),
+                "total_frames": max([max(l["frames"].keys()) for l in self.layers if l["frames"]] or [1]),
+                "fps": self.fps,
+                "resolution": f"{self.width}x{self.height}"
+            }
+        }
+
+    def generate_spritesheet(self, output_path: str, layer_name_or_id: Optional[Any] = None,
+                              columns: Optional[int] = None) -> Dict[str, Any]:
+        """Pack bitmap frames into an organized spritesheet image."""
+        target_layer = None
+        for l in self.layers:
+            if l["type"] == 1:
+                if layer_name_or_id is None or l["id"] == layer_name_or_id or l["name"] == layer_name_or_id:
+                    target_layer = l
+                    break
+
+        if not target_layer or not target_layer["frames"]:
+            raise ValueError("No frames found to generate spritesheet.")
+
+        frame_numbers = sorted(list(target_layer["frames"].keys()))
+        total_frames = len(frame_numbers)
+
+        cols = columns if columns and columns > 0 else total_frames
+        rows = math.ceil(total_frames / cols)
+
+        sheet_w = cols * self.width
+        sheet_h = rows * self.height
+
+        sheet = Image.new("RGBA", (sheet_w, sheet_h), (0, 0, 0, 0))
+
+        frame_metadata = []
+
+        for idx, f_num in enumerate(frame_numbers):
+            fdata = target_layer["frames"][f_num]
+            if fdata.get("bytes"):
+                frame_img = Image.open(io.BytesIO(fdata["bytes"])).convert("RGBA")
+                row = idx // cols
+                col = idx % cols
+                pos_x = col * self.width
+                pos_y = row * self.height
+                sheet.paste(frame_img, (pos_x, pos_y), frame_img)
+                frame_metadata.append({
+                    "frame": f_num,
+                    "x": pos_x,
+                    "y": pos_y,
+                    "width": self.width,
+                    "height": self.height
+                })
+
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        sheet.save(output_path, format="PNG")
+
+        return {
+            "spritesheet_path": output_path,
+            "dimensions": f"{sheet_w}x{sheet_h}",
+            "columns": cols,
+            "rows": rows,
+            "total_frames": total_frames,
+            "frames": frame_metadata
         }
 
 def export_project(project_path: str, output_path: str,

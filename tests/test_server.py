@@ -18,17 +18,24 @@ class TestMCPServer(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_tools_list_spec(self):
-        self.assertGreaterEqual(len(TOOLS), 6)
+        self.assertGreaterEqual(len(TOOLS), 14)
         names = [t["name"] for t in TOOLS]
         self.assertIn("pencil2d_inspect", names)
         self.assertIn("pencil2d_create", names)
         self.assertIn("pencil2d_add_frame", names)
+        self.assertIn("pencil2d_add_frames_batch", names)
+        self.assertIn("pencil2d_add_layer", names)
+        self.assertIn("pencil2d_remove_layer", names)
+        self.assertIn("pencil2d_add_audio", names)
+        self.assertIn("pencil2d_set_camera", names)
+        self.assertIn("pencil2d_manage_palette", names)
+        self.assertIn("pencil2d_create_spritesheet", names)
+        self.assertIn("pencil2d_validate", names)
         self.assertIn("pencil2d_extract_frames", names)
         self.assertIn("pencil2d_export", names)
         self.assertIn("pencil2d_launch_gui", names)
 
     def test_create_and_inspect_tools(self):
-        # 1. Create project
         create_res_raw = handle_call_tool("pencil2d_create", {
             "project_path": self.project_path,
             "width": 640,
@@ -40,7 +47,6 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(create_res["status"], "success")
         self.assertTrue(os.path.exists(self.project_path))
 
-        # 2. Inspect project
         inspect_res_raw = handle_call_tool("pencil2d_inspect", {
             "project_path": self.project_path
         })
@@ -49,6 +55,23 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(inspect_res["fps"], 24)
         layer_names = [l["name"] for l in inspect_res["layers"]]
         self.assertIn("Inking Layer", layer_names)
+
+    def test_validate_and_palette_tools(self):
+        handle_call_tool("pencil2d_create", {"project_path": self.project_path})
+
+        val_raw = handle_call_tool("pencil2d_validate", {"project_path": self.project_path})
+        val = json.loads(val_raw)
+        self.assertTrue(val["is_valid"])
+
+        pal_raw = handle_call_tool("pencil2d_manage_palette", {
+            "project_path": self.project_path,
+            "color_name": "SkyBlue",
+            "red": 100,
+            "green": 180,
+            "blue": 240
+        })
+        pal = json.loads(pal_raw)
+        self.assertEqual(pal["status"], "success")
 
     def test_unknown_tool(self):
         res_raw = handle_call_tool("non_existent_tool", {})
