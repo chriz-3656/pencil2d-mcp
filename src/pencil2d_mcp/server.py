@@ -134,6 +134,10 @@ TOOLS: List[Dict[str, Any]] = [
                 "step": {
                     "type": "integer",
                     "description": "Step interval between frames (default 1)."
+                },
+                "auto_create_layers": {
+                    "type": "boolean",
+                    "description": "Automatically create bitmap layer if specified layer name does not exist (default true)."
                 }
             },
             "required": ["project_path"]
@@ -361,6 +365,18 @@ TOOLS: List[Dict[str, Any]] = [
                 "camera": {
                     "type": "string",
                     "description": "Name of camera layer to use."
+                },
+                "fps": {
+                    "type": "integer",
+                    "description": "Framerate override for export."
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Export execution timeout in seconds (default 180)."
+                },
+                "force_pure_python": {
+                    "type": "boolean",
+                    "description": "Force using internal pure-Python compositor without invoking AppImage CLI (supports GIF, PNG sequence, MP4 via ffmpeg)."
                 }
             },
             "required": ["project_path", "output_path"]
@@ -396,13 +412,13 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
         fps = arguments.get("fps", 12)
         layer_names = arguments.get("layer_names")
 
-        proj = Pencil2DProject(width=width, height=height, fps=fps)
-        if layer_names:
-            proj.layers = [l for l in proj.layers if l["type"] == 5]
-            for lname in layer_names:
-                proj.add_bitmap_layer(lname)
-
-        proj.save(proj_path)
+        proj = Pencil2DProject.create(
+            file_path=proj_path,
+            width=width,
+            height=height,
+            fps=fps,
+            layer_names=layer_names
+        )
         return json.dumps({
             "status": "success",
             "message": f"Created new Pencil2D project at {proj_path}",
@@ -444,6 +460,7 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
         layer_name = arguments.get("layer_name") or "Bitmap Layer"
         start_frame = arguments.get("start_frame", 1)
         step = arguments.get("step", 1)
+        auto_create = arguments.get("auto_create_layers", True)
 
         added_count = 0
 
@@ -454,7 +471,7 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
             for fn in files:
                 fp = os.path.join(dir_path, fn)
                 with open(fp, "rb") as f:
-                    proj.add_frame_image(layer_name, curr_frame, f.read())
+                    proj.add_frame_image(layer_name, curr_frame, f.read(), auto_create_layer=auto_create)
                 curr_frame += step
                 added_count += 1
 
@@ -475,7 +492,7 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
             else:
                 continue
 
-            proj.add_frame_image(l_target, f_num, img_data, t_x, t_y)
+            proj.add_frame_image(l_target, f_num, img_data, t_x, t_y, auto_create_layer=auto_create)
             added_count += 1
 
         proj.save(proj_path)
@@ -614,20 +631,26 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
         out_path = arguments["output_path"]
         width = arguments.get("width")
         height = arguments.get("height")
+        fps = arguments.get("fps")
         start_frame = arguments.get("start_frame")
         end_frame = arguments.get("end_frame")
         transparency = arguments.get("transparency", False)
         camera = arguments.get("camera")
+        timeout = arguments.get("timeout", 180)
+        force_pure_python = arguments.get("force_pure_python", False)
 
         ok, msg = export_project(
             project_path=proj_path,
             output_path=out_path,
             width=width,
             height=height,
+            fps=fps,
             start_frame=start_frame,
             end_frame=end_frame,
             camera=camera,
-            transparency=transparency
+            transparency=transparency,
+            timeout=timeout,
+            force_pure_python=force_pure_python
         )
         return json.dumps({"status": "success" if ok else "failed", "details": msg}, indent=2)
 

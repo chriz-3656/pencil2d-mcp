@@ -94,6 +94,23 @@ class Pencil2DProject:
         self.next_layer_id = 3
 
     @classmethod
+    def create(cls, file_path: Optional[str] = None, width: int = 800, height: int = 600, fps: int = 12,
+               layer_names: Optional[List[str]] = None) -> "Pencil2DProject":
+        """Factory method to create a new Pencil2D project instance, optionally saving to disk."""
+        proj = cls(width=width, height=height, fps=fps)
+        if layer_names:
+            proj.layers = [l for l in proj.layers if l["type"] == 5]
+            for lname in reversed(layer_names):
+                proj.add_bitmap_layer(lname)
+        if file_path:
+            proj.save(file_path)
+        return proj
+
+    def validate(self) -> Dict[str, Any]:
+        """Alias for validate_integrity()."""
+        return self.validate_integrity()
+
+    @classmethod
     def load(cls, file_path: str) -> "Pencil2DProject":
         """Load a .pclx project from disk."""
         if not os.path.exists(file_path):
@@ -397,14 +414,20 @@ class Pencil2DProject:
 
     def add_frame_image(self, layer_id_or_name: Any, frame_num: int,
                          image_bytes_or_path: Union[str, bytes, Image.Image],
-                         top_left_x: Optional[int] = None, top_left_y: Optional[int] = None):
-        """Add or update an image frame in a bitmap layer."""
+                         top_left_x: Optional[int] = None, top_left_y: Optional[int] = None,
+                         auto_create_layer: bool = True):
+        """Add or update an image frame in a bitmap layer. Auto-creates layer if missing."""
         target_layer = None
-        for l in self.layers:
-            if l["type"] == 1:
-                if l["id"] == layer_id_or_name or l["name"] == layer_id_or_name:
-                    target_layer = l
-                    break
+        if layer_id_or_name is not None:
+            for l in self.layers:
+                if l["type"] == 1:
+                    if l["id"] == layer_id_or_name or str(l["id"]) == str(layer_id_or_name) or str(l["name"]).lower() == str(layer_id_or_name).lower():
+                        target_layer = l
+                        break
+
+        if target_layer is None and layer_id_or_name and auto_create_layer and isinstance(layer_id_or_name, str):
+            lid = self.add_bitmap_layer(layer_id_or_name)
+            target_layer = [l for l in self.layers if l["id"] == lid][0]
 
         if target_layer is None:
             for l in self.layers:
@@ -638,13 +661,136 @@ class Pencil2DProject:
             "frames": frame_metadata
         }
 
+    def render_frame(self, frame_num: int) -> Image.Image:
+        """Render a single composited frame as an RGBA Image from all visible bitmap layers."""
+        canvas = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
+        # Composite from bottom layer to top layer
+        for l in reversed(self.layers):
+            if l.get("type") != 1 or not l.get("visible", True):
+                continue
+            frames = l.get("frames", {})
+            if not frames:
+                continue
+            # Find active keyframe (hold frame principle)
+            active_frame_key = None
+            for k in sorted(frames.keys()):
+                if k <= frame_num:
+                    active_frame_key = k
+                else:
+                    break
+            if active_frame_key is not None and active_frame_key in frames:
+                fdata = frames[active_frame_key]
+                img_bytes = fdata.get("bytes")
+                if img_bytes:
+                    try:
+                        frame_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+                        top_x = fdata.get("top_left_x", -self.width // 2)
+                        top_y = fdata.get("top_left_y", -self.height // 2)
+                        px = int(top_x + self.width / 2)
+                        py = int(top_y + self.height / 2)
+                        opacity = float(fdata.get("opacity", 1.0))
+                        if opacity < 1.0:
+                            r, g, b, a = frame_img.split()
+                            a = a.point(lambda p: int(p * opacity))
+                            frame_img.putalpha(a)
+                        canvas.paste(frame_img, (px, py), frame_img)
+                    except Exception:
+                        pass
+        return canvas
+
+    def export_sequence(self, output_dir: str, start_frame: Optional[int] = None,
+                        end_frame: Optional[int] = None, prefix: str = "frame_") -> List[str]:
+        """Export composited animation frames as PNG sequence into output_dir."""
+        os.makedirs(output_dir, exist_ok=True)
+        max_f = max([max(l["frames"].keys()) for l in self.layers if l.get("frames")] or [1])
+        s_frame = max(1, start_frame or self.mark_in)
+        e_frame = max(s_frame, end_frame or max(max_f, self.mark_out))
+        paths = []
+        for f_idx in range(s_frame, e_frame + 1):
+            img = self.render_frame(f_idx)
+            out_p = os.path.join(output_dir, f"{prefix}{f_idx:04d}.png")
+            img.save(out_p, format="PNG")
+            paths.append(out_p)
+        return paths
+
+    def export_gif(self, output_path: str, start_frame: Optional[int] = None,
+                    end_frame: Optional[int] = None, fps: Optional[int] = None,
+                    loop: int = 0) -> bool:
+        """Pure-Python fallback to render and export animation as animated GIF."""
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        max_f = max([max(l["frames"].keys()) for l in self.layers if l.get("frames")] or [1])
+        s_frame = max(1, start_frame or self.mark_in)
+        e_frame = max(s_frame, end_frame or max(max_f, self.mark_out))
+        use_fps = fps or self.fps or 12
+        duration_ms = max(20, int(1000 / use_fps))
+
+        frames = []
+        for f_idx in range(s_frame, e_frame + 1):
+            img = self.render_frame(f_idx)
+            frames.append(img)
+
+        if not frames:
+            return False
+
+        frames[0].save(
+            output_path,
+            save_all=True,
+            append_images=frames[1:],
+            duration=duration_ms,
+            loop=loop,
+            disposal=2
+        )
+        return True
+
 def export_project(project_path: str, output_path: str,
                    width: Optional[int] = None, height: Optional[int] = None,
+                   fps: Optional[int] = None,
                    start_frame: Optional[int] = None, end_frame: Optional[int] = None,
                    camera: Optional[str] = None, transparency: bool = False,
+                   timeout: int = 180, force_pure_python: bool = False,
                    appimage_path: Optional[str] = None) -> Tuple[bool, str]:
-    """Render a Pencil2D project headlessly using the AppImage CLI."""
+    """Render a Pencil2D project using AppImage CLI, with automatic headless support and pure-Python fallback."""
     app_bin = appimage_path or get_appimage_path()
+    ext = os.path.splitext(output_path)[1].lower()
+
+    # If pure-Python fallback requested or AppImage not present:
+    if force_pure_python or not app_bin or not os.path.exists(app_bin):
+        try:
+            proj = Pencil2DProject.load(project_path)
+            if ext == ".gif":
+                ok = proj.export_gif(output_path, start_frame=start_frame, end_frame=end_frame, fps=fps)
+                if ok:
+                    return True, f"Export completed via pure-Python compositor to {output_path}."
+                return False, "Failed to generate GIF frames."
+            elif ext == ".png":
+                target_frame = start_frame or proj.current_frame or 1
+                img = proj.render_frame(target_frame)
+                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                img.save(output_path, format="PNG")
+                return True, f"Exported frame {target_frame} via pure-Python compositor to {output_path}."
+            elif ext == ".mp4":
+                if shutil.which("ffmpeg"):
+                    import tempfile
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        proj.export_sequence(tmp_dir, start_frame=start_frame, end_frame=end_frame)
+                        use_fps = fps or proj.fps or 12
+                        ffmpeg_cmd = [
+                            "ffmpeg", "-y", "-framerate", str(use_fps),
+                            "-i", os.path.join(tmp_dir, "frame_%04d.png"),
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                            os.path.abspath(output_path)
+                        ]
+                        res = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
+                        if res.returncode == 0 and os.path.exists(output_path):
+                            return True, f"Rendered MP4 via FFmpeg fallback to {output_path}."
+                        return False, f"FFmpeg error: {res.stderr}"
+                return False, "Pencil2D executable not found and FFmpeg is not installed for MP4 export."
+            else:
+                return False, f"Unsupported format for pure-Python fallback: {ext}"
+        except Exception as e:
+            if not app_bin or not os.path.exists(app_bin):
+                return False, f"Pencil2D executable not found and fallback failed: {str(e)}"
+
     if not app_bin or not os.path.exists(app_bin):
         return False, f"Pencil2D executable not found. Set PENCIL2D_APPIMAGE env var or install Pencil2D."
 
@@ -663,21 +809,42 @@ def export_project(project_path: str, output_path: str,
         cmd.append("--transparency")
 
     env = os.environ.copy()
-    if "DISPLAY" not in env:
+    has_display = bool(env.get("DISPLAY"))
+    # Headless auto-detection: wrap with xvfb-run if available
+    if not has_display and shutil.which("xvfb-run"):
+        cmd = ["xvfb-run", "-a"] + cmd
+    elif not has_display:
         env["DISPLAY"] = ":0.0"
 
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, timeout=120)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, timeout=timeout)
         output = (proc.stdout + "\n" + proc.stderr).strip()
         if proc.returncode == 0:
             return True, f"Export completed successfully to {output_path}.\n{output}"
         else:
+            # Fallback to pure-Python GIF export if CLI fails
+            if ext == ".gif":
+                try:
+                    proj = Pencil2DProject.load(project_path)
+                    if proj.export_gif(output_path, start_frame=start_frame, end_frame=end_frame, fps=fps):
+                        return True, f"Pencil2D CLI returned {proc.returncode}; successfully exported via pure-Python fallback: {output_path}"
+                except Exception:
+                    pass
             return False, f"Export failed with code {proc.returncode}:\n{output}"
+    except subprocess.TimeoutExpired:
+        if ext == ".gif":
+            try:
+                proj = Pencil2DProject.load(project_path)
+                if proj.export_gif(output_path, start_frame=start_frame, end_frame=end_frame, fps=fps):
+                    return True, f"Pencil2D CLI timed out; exported via pure-Python fallback: {output_path}"
+            except Exception:
+                pass
+        return False, f"Export execution timed out after {timeout} seconds."
     except Exception as e:
         return False, f"Export execution error: {str(e)}"
 
 def launch_gui(project_path: Optional[str] = None, appimage_path: Optional[str] = None) -> Tuple[bool, str]:
-    """Launch Pencil2D in visual GUI mode as a background process."""
+    """Launch Pencil2D in visual GUI mode as a detached background process."""
     app_bin = appimage_path or get_appimage_path()
     if not app_bin or not os.path.exists(app_bin):
         return False, f"Pencil2D executable not found. Set PENCIL2D_APPIMAGE env var or install Pencil2D."
@@ -691,7 +858,16 @@ def launch_gui(project_path: Optional[str] = None, appimage_path: Optional[str] 
         env["DISPLAY"] = ":0.0"
 
     try:
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
         return True, f"Launched Pencil2D GUI (PID {proc.pid}) with project: {project_path or 'New Workspace'}"
     except Exception as e:
         return False, f"Failed to launch GUI: {str(e)}"
+
+# Convenient API aliases
+render_animation = export_project

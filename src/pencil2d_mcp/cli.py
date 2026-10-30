@@ -33,6 +33,9 @@ def main():
     export_parser.add_argument("--height", type=int, help="Target frame height")
     export_parser.add_argument("--start", type=int, help="Start frame index")
     export_parser.add_argument("--end", type=int, help="End frame index")
+    export_parser.add_argument("--fps", type=int, help="Framerate override")
+    export_parser.add_argument("--timeout", type=int, default=180, help="Export timeout in seconds (default 180)")
+    export_parser.add_argument("--pure-python", action="store_true", help="Use pure-Python compositor without AppImage")
     export_parser.add_argument("--transparency", action="store_true", help="Enable transparency")
 
     # gui command
@@ -70,9 +73,12 @@ def main():
             output_path=args.output,
             width=args.width,
             height=args.height,
+            fps=args.fps,
             start_frame=args.start,
             end_frame=args.end,
-            transparency=args.transparency
+            transparency=args.transparency,
+            timeout=args.timeout,
+            force_pure_python=args.pure_python
         )
         print(msg)
         if not ok:

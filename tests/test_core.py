@@ -83,6 +83,50 @@ class TestPencil2DProject(unittest.TestCase):
         proj = Pencil2DProject()
         val = proj.validate_integrity()
         self.assertTrue(val["is_valid"])
+        # Test validate() alias
+        val_alias = proj.validate()
+        self.assertEqual(val["is_valid"], val_alias["is_valid"])
+
+    def test_create_factory_method(self):
+        proj = Pencil2DProject.create(
+            file_path=self.project_path,
+            width=640,
+            height=480,
+            fps=20,
+            layer_names=["Background", "Character", "Foreground"]
+        )
+        self.assertEqual(proj.width, 640)
+        self.assertEqual(proj.height, 480)
+        self.assertEqual(proj.fps, 20)
+        self.assertTrue(os.path.exists(self.project_path))
+        # Check layer order preserves input order
+        bitmap_layer_names = [l["name"] for l in proj.layers if l["type"] == 1]
+        self.assertEqual(bitmap_layer_names, ["Background", "Character", "Foreground"])
+
+    def test_auto_create_layer(self):
+        proj = Pencil2DProject()
+        img = Image.new("RGBA", (100, 100), (0, 0, 255, 255))
+        # Target layer "Hair Layer" does not exist yet; auto_create_layer should create it
+        proj.add_frame_image("Hair Layer", 1, img, auto_create_layer=True)
+        self.assertTrue(any(l["name"] == "Hair Layer" for l in proj.layers))
+
+    def test_pure_python_rendering_and_gif(self):
+        proj = Pencil2DProject(width=200, height=200, fps=10)
+        img1 = Image.new("RGBA", (200, 200), (255, 0, 0, 255))
+        img2 = Image.new("RGBA", (200, 200), (0, 255, 0, 255))
+        proj.add_frame_image("Bitmap Layer", 1, img1)
+        proj.add_frame_image("Bitmap Layer", 2, img2)
+
+        # Test single frame compositing
+        frame_1 = proj.render_frame(1)
+        self.assertEqual(frame_1.size, (200, 200))
+
+        # Test GIF export
+        gif_out = os.path.join(self.test_dir, "test_render.gif")
+        ok = proj.export_gif(gif_out, start_frame=1, end_frame=2)
+        self.assertTrue(ok)
+        self.assertTrue(os.path.exists(gif_out))
+        self.assertGreater(os.path.getsize(gif_out), 0)
 
     def test_appimage_detection(self):
         path = get_appimage_path()

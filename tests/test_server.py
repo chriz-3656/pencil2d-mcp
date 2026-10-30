@@ -73,6 +73,19 @@ class TestMCPServer(unittest.TestCase):
         pal = json.loads(pal_raw)
         self.assertEqual(pal["status"], "success")
 
+    def test_export_tool_pure_python(self):
+        handle_call_tool("pencil2d_create", {"project_path": self.project_path, "width": 100, "height": 100})
+        out_gif = os.path.join(self.test_dir, "mcp_export.gif")
+        res_raw = handle_call_tool("pencil2d_export", {
+            "project_path": self.project_path,
+            "output_path": out_gif,
+            "fps": 12,
+            "force_pure_python": True
+        })
+        res = json.loads(res_raw)
+        self.assertEqual(res["status"], "success")
+        self.assertTrue(os.path.exists(out_gif))
+
     def test_unknown_tool(self):
         res_raw = handle_call_tool("non_existent_tool", {})
         res = json.loads(res_raw)
