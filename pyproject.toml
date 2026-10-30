@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pencil2d-mcp"
+version = "0.1.0"
+description = "Model Context Protocol (MCP) server and automation toolkit for Pencil2D animation"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "chriz-3656" }
+]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "pencil2d",
+    "animation",
+    "2d-animation",
+    "ai-agent",
+    "claude",
+    "antigravity",
+    "gemini"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = [
+    "Pillow>=8.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0"
+]
+
+[project.scripts]
+pencil2d-mcp = "pencil2d_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/chriz-3656/pencil2d-mcp"
+Repository = "https://github.com/chriz-3656/pencil2d-mcp"
+Issues = "https://github.com/chriz-3656/pencil2d-mcp/issues"
+Changelog = "https://github.com/chriz-3656/pencil2d-mcp/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]

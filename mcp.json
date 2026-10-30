@@ -1,0 +1,41 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-server.json",
+  "name": "pencil2d-mcp",
+  "description": "Model Context Protocol (MCP) server for Pencil2D traditional 2D animation creation and rendering",
+  "version": "0.1.0",
+  "author": "chriz-3656",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chriz-3656/pencil2d-mcp"
+  },
+  "runtime": "python",
+  "command": "pencil2d-mcp",
+  "args": ["serve"],
+  "tools": [
+    {
+      "name": "pencil2d_inspect",
+      "description": "Inspect a Pencil2D project (.pclx file), returning canvas resolution, FPS, keyframe counts, layers, and palette."
+    },
+    {
+      "name": "pencil2d_create",
+      "description": "Create a new blank Pencil2D project (.pclx) with specified canvas resolution, FPS, and layers."
+    },
+    {
+      "name": "pencil2d_add_frame",
+      "description": "Add or replace a keyframe image in a Pencil2D project bitmap layer."
+    },
+    {
+      "name": "pencil2d_extract_frames",
+      "description": "Extract all frame PNG images from a .pclx file into a target directory."
+    },
+    {
+      "name": "pencil2d_export",
+      "description": "Render a Pencil2D animation project to video (MP4), animated GIF, or image sequence using the Pencil2D AppImage CLI."
+    },
+    {
+      "name": "pencil2d_launch_gui",
+      "description": "Open a project (or a new workspace) inside the Pencil2D GUI for visual animation editing."
+    }
+  ]
+}
