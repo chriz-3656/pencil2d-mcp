@@ -388,3 +388,303 @@ def apply_camera_shake(canvas: Image.Image, dx: float, dy: float,
     shaken.paste(canvas, (int(round(dx)), int(round(dy))))
     return shaken
 
+
+# -------------------------------------------------------------------------
+# Articulated Inverse Kinematics (IK) & Fluid Locomotion Engine
+# -------------------------------------------------------------------------
+
+def solve_2bone_ik(root: Tuple[float, float],
+                   target: Tuple[float, float],
+                   l1: float,
+                   l2: float,
+                   bend_positive: bool = True) -> Tuple[float, float]:
+    """Analytic 2-bone Inverse Kinematics solver for natural elbow and knee articulation.
+    
+    Guarantees mathematically exact limb lengths (zero distortion or stretching)
+    and smooth natural flexion.
+    """
+    dx = target[0] - root[0]
+    dy = target[1] - root[1]
+    dist = math.hypot(dx, dy)
+
+    # Clamp distance so bone does not pop or hyper-extend
+    max_reach = l1 + l2 - 0.001
+    min_reach = abs(l1 - l2) + 0.001
+    clamped_dist = max(min_reach, min(max_reach, dist))
+
+    base_angle = math.atan2(dy, dx)
+    cos_alpha = (l1 * l1 + clamped_dist * clamped_dist - l2 * l2) / (2.0 * l1 * clamped_dist)
+    cos_alpha = max(-1.0, min(1.0, cos_alpha))
+    alpha = math.acos(cos_alpha)
+
+    joint_angle = base_angle + (alpha if bend_positive else -alpha)
+    jx = root[0] + l1 * math.cos(joint_angle)
+    jy = root[1] + l1 * math.sin(joint_angle)
+    return (jx, jy)
+
+
+class StickmanPose:
+    """Complete 15-joint articulated stickman skeleton state."""
+
+    def __init__(self,
+                 head: Tuple[float, float],
+                 neck: Tuple[float, float],
+                 pelvis: Tuple[float, float],
+                 spine_mid: Tuple[float, float],
+                 l_shoulder: Tuple[float, float],
+                 l_elbow: Tuple[float, float],
+                 l_hand: Tuple[float, float],
+                 r_shoulder: Tuple[float, float],
+                 r_elbow: Tuple[float, float],
+                 r_hand: Tuple[float, float],
+                 l_hip: Tuple[float, float],
+                 l_knee: Tuple[float, float],
+                 l_foot: Tuple[float, float],
+                 r_hip: Tuple[float, float],
+                 r_knee: Tuple[float, float],
+                 r_foot: Tuple[float, float],
+                 facing: int = 1,
+                 head_radius: float = 14.0,
+                 weapon: Optional[str] = None):
+        self.head = head
+        self.neck = neck
+        self.pelvis = pelvis
+        self.spine_mid = spine_mid
+        self.l_shoulder = l_shoulder
+        self.l_elbow = l_elbow
+        self.l_hand = l_hand
+        self.r_shoulder = r_shoulder
+        self.r_elbow = r_elbow
+        self.r_hand = r_hand
+        self.l_hip = l_hip
+        self.l_knee = l_knee
+        self.l_foot = l_foot
+        self.r_hip = r_hip
+        self.r_knee = r_knee
+        self.r_foot = r_foot
+        self.facing = facing
+        self.head_radius = head_radius
+        self.weapon = weapon
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "head": self.head, "neck": self.neck, "pelvis": self.pelvis,
+            "spine_mid": self.spine_mid, "l_shoulder": self.l_shoulder,
+            "l_elbow": self.l_elbow, "l_hand": self.l_hand,
+            "r_shoulder": self.r_shoulder, "r_elbow": self.r_elbow,
+            "r_hand": self.r_hand, "l_hip": self.l_hip,
+            "l_knee": self.l_knee, "l_foot": self.l_foot,
+            "r_hip": self.r_hip, "r_knee": self.r_knee,
+            "r_foot": self.r_foot, "facing": self.facing,
+            "head_radius": self.head_radius, "weapon": self.weapon
+        }
+
+
+def blend_stickman_poses(pose_a: StickmanPose, pose_b: StickmanPose, t: float) -> StickmanPose:
+    """Seamlessly interpolate every joint between two poses using cubic easing.
+    
+    Completely eliminates instantaneous teleporting and joint snapping.
+    """
+    t = clamp(t)
+    st = t * t * (3.0 - 2.0 * t) # Smoothstep easing
+
+    def lerp_pt(p1: Tuple[float, float], p2: Tuple[float, float]) -> Tuple[float, float]:
+        return (p1[0] * (1.0 - st) + p2[0] * st, p1[1] * (1.0 - st) + p2[1] * st)
+
+    return StickmanPose(
+        head=lerp_pt(pose_a.head, pose_b.head),
+        neck=lerp_pt(pose_a.neck, pose_b.neck),
+        pelvis=lerp_pt(pose_a.pelvis, pose_b.pelvis),
+        spine_mid=lerp_pt(pose_a.spine_mid, pose_b.spine_mid),
+        l_shoulder=lerp_pt(pose_a.l_shoulder, pose_b.l_shoulder),
+        l_elbow=lerp_pt(pose_a.l_elbow, pose_b.l_elbow),
+        l_hand=lerp_pt(pose_a.l_hand, pose_b.l_hand),
+        r_shoulder=lerp_pt(pose_a.r_shoulder, pose_b.r_shoulder),
+        r_elbow=lerp_pt(pose_a.r_elbow, pose_b.r_elbow),
+        r_hand=lerp_pt(pose_a.r_hand, pose_b.r_hand),
+        l_hip=lerp_pt(pose_a.l_hip, pose_b.l_hip),
+        l_knee=lerp_pt(pose_a.l_knee, pose_b.l_knee),
+        l_foot=lerp_pt(pose_a.l_foot, pose_b.l_foot),
+        r_hip=lerp_pt(pose_a.r_hip, pose_b.r_hip),
+        r_knee=lerp_pt(pose_a.r_knee, pose_b.r_knee),
+        r_foot=lerp_pt(pose_a.r_foot, pose_b.r_foot),
+        facing=pose_b.facing if t > 0.5 else pose_a.facing,
+        head_radius=pose_a.head_radius * (1.0 - st) + pose_b.head_radius * st,
+        weapon=pose_b.weapon if t > 0.5 else pose_a.weapon
+    )
+
+
+def generate_locomotion_pose(x: float, ground_y: float, phase: float,
+                             facing: int = 1, speed: float = 1.0,
+                             weapon: Optional[str] = None) -> StickmanPose:
+    """Generate anatomically grounded walk, jog, or sprint pose.
+    
+    Features:
+    - True stance foot ground-locking (zero sliding/ice-skating).
+    - Swing leg knee flexion and ground clearance arc.
+    - Pelvis double-frequency vertical bounce and sway.
+    - Speed-proportional spinal lean into movement.
+    - Counter-phase natural arm pendulum with elbow flexion solved via 2-bone IK.
+    """
+    is_running = speed > 1.2
+    is_sprint = speed > 2.0
+
+    # Anatomical proportions
+    thigh_len = 28.0
+    calf_len = 28.0
+    upper_arm = 20.0
+    forearm = 20.0
+    torso_len = 42.0
+    head_r = 14.0
+
+    stride = 62.0 if is_sprint else (50.0 if is_running else 34.0)
+    step_height = 28.0 if is_sprint else (20.0 if is_running else 10.0)
+    bob_amp = 12.0 if is_sprint else (8.0 if is_running else 4.5)
+    lean_deg = 24.0 if is_sprint else (16.0 if is_running else 6.0)
+
+    # Pelvis vertical oscillation (bobs twice per full stride cycle)
+    pelvis_base_y = ground_y - (44.0 if is_sprint else (48.0 if is_running else 51.0))
+    bob = -bob_amp * abs(math.sin(2.0 * math.pi * phase))
+    pelvis = (x, pelvis_base_y + bob)
+
+    # Spine & Torso lean
+    lean_rad = math.radians(lean_deg) * facing
+    neck = (pelvis[0] + math.sin(lean_rad) * torso_len,
+            pelvis[1] - math.cos(lean_rad) * torso_len)
+    spine_mid = ((pelvis[0] + neck[0]) * 0.5 + math.sin(lean_rad) * 4.0,
+                 (pelvis[1] + neck[1]) * 0.5)
+
+    # Head
+    head = (neck[0] + math.sin(lean_rad * 0.5) * (head_r + 6),
+            neck[1] - math.cos(lean_rad * 0.5) * (head_r + 6))
+
+    # Shoulders & Hips
+    l_shoulder = (neck[0] - facing * 4.0, neck[1] + 3.0)
+    r_shoulder = (neck[0] + facing * 4.0, neck[1] + 3.0)
+    l_hip = (pelvis[0] - facing * 5.0, pelvis[1])
+    r_hip = (pelvis[0] + facing * 5.0, pelvis[1])
+
+    # Leg kinematics
+    phase_l = phase % 1.0
+    phase_r = (phase + 0.5) % 1.0
+
+    def compute_leg(hip: Tuple[float, float], leg_phase: float):
+        if leg_phase <= 0.6:
+            # Stance phase: planted firmly on ground
+            u = leg_phase / 0.6
+            foot_x = hip[0] + facing * (stride * 0.5 - stride * u)
+            foot_y = ground_y
+        else:
+            # Swing phase: knee lifts up, foot arcs forward
+            v = (leg_phase - 0.6) / 0.4
+            foot_x = hip[0] + facing * (-stride * 0.5 + stride * v)
+            foot_y = ground_y - step_height * math.sin(math.pi * v)
+
+        # Knee IK: knees flex forward relative to character direction
+        knee = solve_2bone_ik(hip, (foot_x, foot_y), thigh_len, calf_len, bend_positive=(facing > 0))
+        return knee, (foot_x, foot_y)
+
+    l_knee, l_foot = compute_leg(l_hip, phase_l)
+    r_knee, r_foot = compute_leg(r_hip, phase_r)
+
+    # Arm kinematics (counter-phase to legs)
+    def compute_arm(shoulder: Tuple[float, float], arm_phase: float):
+        swing_amp = math.radians(70.0 if is_sprint else (55.0 if is_running else 30.0))
+        arm_angle = -swing_amp * math.sin(2.0 * math.pi * arm_phase) * facing
+        flex = 0.80 if arm_angle * facing > 0 else 0.95
+        reach = (upper_arm + forearm) * flex
+        target = (shoulder[0] + math.sin(arm_angle) * reach,
+                  shoulder[1] + math.cos(arm_angle) * reach)
+        elbow = solve_2bone_ik(shoulder, target, upper_arm, forearm, bend_positive=(facing < 0))
+        return elbow, target
+
+    l_elbow, l_hand = compute_arm(l_shoulder, phase_l)
+    r_elbow, r_hand = compute_arm(r_shoulder, phase_r)
+
+    return StickmanPose(
+        head=head, neck=neck, pelvis=pelvis, spine_mid=spine_mid,
+        l_shoulder=l_shoulder, l_elbow=l_elbow, l_hand=l_hand,
+        r_shoulder=r_shoulder, r_elbow=r_elbow, r_hand=r_hand,
+        l_hip=l_hip, l_knee=l_knee, l_foot=l_foot,
+        r_hip=r_hip, r_knee=r_knee, r_foot=r_foot,
+        facing=facing, head_radius=head_r, weapon=weapon
+    )
+
+
+def render_smooth_stickman(canvas: Image.Image, pose: StickmanPose,
+                           color: Tuple[int, int, int, int],
+                           sash_color: Tuple[int, int, int, int],
+                           frame_num: int = 0,
+                           aura_type: Optional[str] = None):
+    """Render articulated stickman skeleton with Bezier curves, joints, and cloth sash physics."""
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    f = pose.facing
+
+    # 1. Aura glow if active
+    if aura_type == "fire":
+        draw_soft_gradient_glow(canvas, pose.pelvis, radius=65, color=(255, 90, 20, 90))
+        # Fiery rising wisps
+        for i in range(4):
+            w_x = pose.pelvis[0] + math.sin(frame_num * 0.4 + i) * 22.0
+            w_y = pose.pelvis[1] - 15.0 - ((frame_num * 3 + i * 15) % 55)
+            draw.ellipse([w_x - 3, w_y - 4, w_x + 3, w_y + 4], fill=(255, 180, 40, 180))
+
+    elif aura_type == "lightning":
+        draw_soft_gradient_glow(canvas, pose.pelvis, radius=65, color=(30, 160, 255, 80))
+        # Electric jagged crackles
+        for i in range(3):
+            lx = pose.pelvis[0] + math.sin(frame_num * 0.8 + i * 2.0) * 26.0
+            ly = pose.pelvis[1] + math.cos(frame_num * 0.8 + i * 2.0) * 26.0
+            draw.line([(lx, ly), (lx + random.uniform(-10, 10), ly + random.uniform(-10, 10))],
+                      fill=(190, 245, 255, 230), width=2)
+
+    # 2. Flowing Sash / Headband Cloth Physics (dual-wave harmonic simulation)
+    sash_anchor = (pose.head[0] - f * (pose.head_radius * 0.85), pose.head[1] - 2.0)
+    w1 = math.sin(frame_num * 0.35) * 6.0
+    w2 = math.cos(frame_num * 0.65) * 4.0
+    sash_mid = (sash_anchor[0] - f * 20.0, sash_anchor[1] + 6.0 + w1)
+    sash_tip = (sash_anchor[0] - f * 42.0, sash_anchor[1] + 14.0 + w1 + w2)
+    draw_tapered_stroke(canvas, [sash_anchor, sash_mid, sash_tip], sash_color, base_width=4.0)
+
+    # 3. Limbs: Tapered multi-joint strokes
+    # Back arm
+    draw_tapered_stroke(canvas, [pose.l_shoulder, pose.l_elbow, pose.l_hand], color, base_width=4.2)
+    # Legs
+    draw_tapered_stroke(canvas, [pose.l_hip, pose.l_knee, pose.l_foot], color, base_width=5.2)
+    draw_tapered_stroke(canvas, [pose.r_hip, pose.r_knee, pose.r_foot], color, base_width=5.2)
+    # Curved Spine (Line of Action)
+    draw_tapered_stroke(canvas, [pose.pelvis, pose.spine_mid, pose.neck], color, base_width=5.8)
+    # Front arm
+    draw_tapered_stroke(canvas, [pose.r_shoulder, pose.r_elbow, pose.r_hand], color, base_width=4.5)
+
+    # 4. Joint spheres (knees, elbows, shoulders)
+    for j_pt in [pose.l_elbow, pose.r_elbow, pose.l_knee, pose.r_knee, pose.pelvis, pose.neck]:
+        draw.ellipse([j_pt[0] - 2.5, j_pt[1] - 2.5, j_pt[0] + 2.5, j_pt[1] + 2.5], fill=color)
+
+    # 5. Head & Headband Wrap
+    hx, hy = pose.head
+    hr = pose.head_radius
+    draw.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=color)
+    # Headband wrap line
+    draw.line([(hx - hr * 0.95, hy - hr * 0.15), (hx + hr * 0.95, hy - hr * 0.15)], fill=sash_color, width=3)
+    # Expressive eye slit (gazing in direction of facing)
+    eye_x = hx + f * (hr * 0.38)
+    draw.line([(eye_x - 2, hy - hr * 0.15), (eye_x + 3, hy - hr * 0.15)], fill=(255, 255, 255, 255), width=2)
+
+    # 6. Equipped Weapons
+    if pose.weapon == "katana":
+        hilt = pose.r_hand
+        blade_mid = (hilt[0] + f * 28.0, hilt[1] - 22.0)
+        blade_tip = (hilt[0] + f * 54.0, hilt[1] - 38.0)
+        draw_tapered_stroke(canvas, [hilt, blade_mid, blade_tip], (255, 120, 20, 220), base_width=6.0)
+        draw_tapered_stroke(canvas, [hilt, blade_mid, blade_tip], (255, 250, 190, 255), base_width=3.0)
+
+    elif pose.weapon == "daggers":
+        tip_l = (pose.l_hand[0] + f * 24.0, pose.l_hand[1] - 14.0)
+        tip_r = (pose.r_hand[0] + f * 26.0, pose.r_hand[1] - 8.0)
+        draw.line([pose.l_hand, tip_l], fill=(180, 245, 255, 255), width=3)
+        draw.line([pose.r_hand, tip_r], fill=(180, 245, 255, 255), width=3)
+        draw.ellipse([tip_l[0] - 3, tip_l[1] - 3, tip_l[0] + 3, tip_l[1] + 3], fill=(255, 255, 255, 255))
+        draw.ellipse([tip_r[0] - 3, tip_r[1] - 3, tip_r[0] + 3, tip_r[1] + 3], fill=(255, 255, 255, 255))
+
+

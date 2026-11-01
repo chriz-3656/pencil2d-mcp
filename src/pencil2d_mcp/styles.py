@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw
 
 from .drawing import (
+    StickmanPose,
+    blend_stickman_poses,
     bow_curve,
     calculate_squash_stretch,
     draw_doodle_wobble_line,
@@ -26,8 +28,11 @@ from .drawing import (
     ease_in_quad,
     ease_out_quad,
     ease_overshoot,
+    generate_locomotion_pose,
     parabolic_arc,
+    render_smooth_stickman,
     sample_cubic_bezier,
+    solve_2bone_ik,
 )
 
 
@@ -98,50 +103,25 @@ class StickmanRenderer:
         cx = width * 0.5
         ground_y = height * 0.78
 
-        if action == "run":
+        if action in ("walk", "run"):
+            is_run = (action == "run")
+            speed = 2.0 if is_run else 1.0
+            stride = 55.0 if is_run else 36.0
             for f in range(frame_count):
-                phase = (f / float(frame_count)) * (2.0 * math.pi)
-                bob = math.sin(phase * 2.0) * 14.0
-                forward_x = cx - 80 + (f / float(frame_count)) * 160.0
+                t = f / float(max(1, frame_count - 1))
+                forward_x = (cx - 100.0) + t * 200.0
+                phase = (forward_x / stride) % 1.0
 
-                # Running pose parameters
-                head_x = forward_x + 18.0
-                head_y = ground_y - 120.0 + bob
-                pelvis_x = forward_x
-                pelvis_y = ground_y - 55.0 + bob
-
-                spine = bow_curve((head_x, head_y + 12), (pelvis_x, pelvis_y), bow_amount=12.0)
-
-                # Alternating leg stride
-                l_foot_x = pelvis_x + math.sin(phase) * 45.0
-                l_foot_y = ground_y - max(0.0, -math.cos(phase)) * 25.0
-                r_foot_x = pelvis_x + math.sin(phase + math.pi) * 45.0
-                r_foot_y = ground_y - max(0.0, -math.cos(phase + math.pi)) * 25.0
-
-                l_knee = ((pelvis_x + l_foot_x) * 0.5 + 8, (pelvis_y + l_foot_y) * 0.5 - 10)
-                r_knee = ((pelvis_x + r_foot_x) * 0.5 - 8, (pelvis_y + r_foot_y) * 0.5 - 10)
-
-                l_leg = [ (pelvis_x, pelvis_y), l_knee, (l_foot_x, l_foot_y) ]
-                r_leg = [ (pelvis_x, pelvis_y), r_knee, (r_foot_x, r_foot_y) ]
-
-                # Alternating arms (opposite to legs)
-                l_hand_x = forward_x - math.sin(phase) * 35.0
-                l_hand_y = head_y + 25.0 + math.cos(phase) * 15.0
-                r_hand_x = forward_x - math.sin(phase + math.pi) * 35.0
-                r_hand_y = head_y + 25.0 + math.cos(phase + math.pi) * 15.0
-
-                l_arm = [ (head_x - 4, head_y + 18), ((head_x + l_hand_x)*0.5, head_y + 35), (l_hand_x, l_hand_y) ]
-                r_arm = [ (head_x - 4, head_y + 18), ((head_x + r_hand_x)*0.5, head_y + 35), (r_hand_x, r_hand_y) ]
-
-                tail = bow_curve((head_x - 12, head_y - 2), (head_x - 45, head_y - 10 + math.sin(phase) * 8), bow_amount=6.0)
-
-                dust = (forward_x - 25, ground_y + 2) if (f % 4 == 0) else None
-
-                frame_img = cls.render_pose(
-                    width, height, (head_x, head_y), spine, l_arm, r_arm, l_leg, r_leg,
-                    headband_tail=tail, dust_pos=dust
+                pose = generate_locomotion_pose(
+                    x=forward_x, ground_y=ground_y, phase=phase,
+                    facing=1, speed=speed
                 )
-                frames.append(frame_img)
+                img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                if f % (3 if is_run else 5) == 0:
+                    draw_dust_puff(img, (forward_x - 18, ground_y + 2), radius=14.0)
+
+                render_smooth_stickman(img, pose, cls.COLOR, cls.ACCENT, frame_num=f)
+                frames.append(img)
 
         else: # "jump" or action leap
             for f in range(frame_count):
