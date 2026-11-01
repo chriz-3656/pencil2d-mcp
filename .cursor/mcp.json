@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pencil2d": {
+      "command": "python3",
+      "args": ["-m", "pencil2d_mcp", "serve"],
+      "env": {
+        "PYTHONPATH": "/home/demo/Templates/pencil2d-mcp/src",
+        "PENCIL2D_APPIMAGE": "/home/demo/Downloads/pencil2d-linux-amd64-v0.7.2.AppImage",
+        "DISPLAY": ":0.0"
+      }
+    }
+  }
+}
