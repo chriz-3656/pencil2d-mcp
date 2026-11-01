@@ -1,6 +1,7 @@
 """Model Context Protocol (MCP) JSON-RPC 2.0 stdio server implementation for Pencil2D."""
 
 import base64
+import io
 import json
 import os
 import sys
@@ -8,6 +9,24 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from .core import Pencil2DProject, export_project, launch_gui, get_appimage_path
+
+SERVER_INSTRUCTIONS = """Pencil2D MCP Server drives traditional 2D hand-drawn animation in Pencil2D.
+
+KEY PRINCIPLES FOR EXCELLENT 2D ANIMATION:
+- Avoid robotic 'math-diagram' drawings: Never draw sterile straight lines or bare compass circles.
+- Always apply the 12 Principles of 2D Animation:
+  1. Squash & Stretch: Compress height on impact/anticipation, expand width (area preservation: W = W0 / sqrt(Sy)).
+  2. Anticipation & Overshoot: Wind up before fast actions; overshoot slightly when landing.
+  3. Arcs of Motion: All organic movements travel in smooth parabolic curves, never linear diagonals.
+  4. Timing & Easing: Use ease-in and ease-out curves instead of constant-speed linear spacing.
+- Use 'pencil2d_get_guide' to load craft guides:
+  - 'animation': 12 principles of 2D animation, timing charts, squash & stretch.
+  - 'styles': Recipes for Stickman (action martial arts), Anime (cel-shaded), Pencil Sketch (Disney rough graphite), Studio Ghibli (painterly landscapes/clouds), and Doodle (cartoon rubber-hose).
+  - 'drawing_techniques': Organic Bezier curves, tapered strokes, and color harmony.
+- Visual Verification:
+  - ALWAYS call 'pencil2d_look' with mode='strip' to inspect the animation filmstrip contact sheet and verify motion continuity.
+- High-Level Stylized Generation:
+  - Use 'pencil2d_generate_animation' to immediately generate authentic Stickman, Anime, Pencil Sketch, Ghibli, or Doodle animations."""
 
 TOOLS: List[Dict[str, Any]] = [
     {
@@ -394,6 +413,104 @@ TOOLS: List[Dict[str, Any]] = [
                 }
             }
         }
+    },
+    {
+        "name": "pencil2d_look",
+        "description": "Visually inspect the animation by generating a multi-frame filmstrip contact sheet (with frame numbers, timeline indicators, and optional onion skinning) or a single composited frame.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Path to the .pclx file."
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["strip", "frame"],
+                    "description": "Inspection mode: 'strip' (multi-frame contact sheet filmstrip; default) or 'frame' (single composited frame)."
+                },
+                "frames": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Specific keyframe indices to include in the preview strip."
+                },
+                "frame_count": {
+                    "type": "integer",
+                    "description": "Number of evenly spaced frames to sample across the timeline (default 6)."
+                },
+                "frame": {
+                    "type": "integer",
+                    "description": "Frame index when mode is 'frame' (defaults to current/first frame)."
+                },
+                "onion_skin": {
+                    "type": "boolean",
+                    "description": "Enable onion skinning overlay showing previous frame ghosted beneath current frame (default false)."
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Optional destination PNG path for the rendered preview strip."
+                }
+            },
+            "required": ["project_path"]
+        }
+    },
+    {
+        "name": "pencil2d_generate_animation",
+        "description": "Generate a complete, high-quality stylized 2D animation project using authentic artistic styles (Stickman martial arts, Anime cel-shaded, Disney-style Pencil Sketch, Studio Ghibli landscape, Hand-drawn Doodle) with squash & stretch physics and curved lines of action.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Output path for the .pclx project file."
+                },
+                "style": {
+                    "type": "string",
+                    "enum": ["stickman", "anime", "pencil_sketch", "ghibli", "doodle"],
+                    "description": "Artistic animation style to generate (default 'stickman')."
+                },
+                "action": {
+                    "type": "string",
+                    "description": "Specific action to animate (e.g., 'jump', 'run' for stickman; 'blink_and_breeze' for anime; 'sketch_bird_flight' for sketch; 'breeze_scene' for ghibli; 'bounce_dance' for doodle)."
+                },
+                "frame_count": {
+                    "type": "integer",
+                    "description": "Number of animation frames to generate (default 12)."
+                },
+                "fps": {
+                    "type": "integer",
+                    "description": "Playback frames per second (default 12)."
+                },
+                "width": {
+                    "type": "integer",
+                    "description": "Canvas width in pixels (default 800)."
+                },
+                "height": {
+                    "type": "integer",
+                    "description": "Canvas height in pixels (default 600)."
+                },
+                "layer_name": {
+                    "type": "string",
+                    "description": "Target layer name for animation frames (default 'Animation Layer')."
+                }
+            },
+            "required": ["project_path"]
+        }
+    },
+    {
+        "name": "pencil2d_get_guide",
+        "description": "Retrieve craft knowledge guides on 2D animation principles, squash & stretch volume preservation, timing charts, and recipes for Stickman, Anime, Pencil Sketch, Ghibli, and Doodle styles.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "enum": ["animation", "styles", "drawing_techniques"],
+                    "description": "Guide topic to retrieve ('animation', 'styles', or 'drawing_techniques')."
+                }
+            },
+            "required": ["topic"]
+        }
     }
 ]
 
@@ -659,6 +776,88 @@ def handle_call_tool(name: str, arguments: Dict[str, Any]) -> str:
         ok, msg = launch_gui(proj_path)
         return json.dumps({"status": "success" if ok else "failed", "details": msg}, indent=2)
 
+    elif name == "pencil2d_look":
+        proj_path = arguments["project_path"]
+        mode = arguments.get("mode", "strip")
+        proj = Pencil2DProject.load(proj_path)
+
+        if mode == "frame":
+            target_f = arguments.get("frame") or proj.current_frame or 1
+            frame_img = proj.render_frame(target_f)
+            out_p = arguments.get("output_path")
+            if not out_p:
+                import tempfile
+                fd, out_p = tempfile.mkstemp(prefix=f"pencil2d_frame_{target_f}_", suffix=".png")
+                os.close(fd)
+            frame_img.save(out_p, format="PNG")
+            buf = io.BytesIO()
+            frame_img.save(buf, format="PNG")
+            b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+            return json.dumps({
+                "status": "success",
+                "mode": "frame",
+                "frame": target_f,
+                "preview_path": out_p,
+                "data_url": f"data:image/png;base64,{b64_str[:128]}...",
+                "summary": proj.inspect_summary()
+            }, indent=2)
+        else: # "strip"
+            frames = arguments.get("frames")
+            fc = arguments.get("frame_count", 6)
+            onion = arguments.get("onion_skin", False)
+            out_p = arguments.get("output_path")
+            strip_img, final_out_p = proj.generate_preview_strip(
+                frames=frames, frame_count=fc, onion_skin=onion, output_path=out_p
+            )
+            buf = io.BytesIO()
+            strip_img.save(buf, format="PNG")
+            b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+            return json.dumps({
+                "status": "success",
+                "mode": "strip",
+                "preview_strip_path": final_out_p,
+                "strip_dimensions": f"{strip_img.width}x{strip_img.height}",
+                "data_url": f"data:image/png;base64,{b64_str[:128]}...",
+                "summary": proj.inspect_summary()
+            }, indent=2)
+
+    elif name == "pencil2d_generate_animation":
+        proj_path = arguments["project_path"]
+        style = arguments.get("style", "stickman")
+        action = arguments.get("action")
+        fc = arguments.get("frame_count", 12)
+        fps = arguments.get("fps", 12)
+        width = arguments.get("width", 800)
+        height = arguments.get("height", 600)
+        layer_name = arguments.get("layer_name", "Animation Layer")
+
+        from .styles import generate_stylized_animation
+        frames = generate_stylized_animation(style=style, action=action, width=width, height=height, frame_count=fc)
+
+        proj = Pencil2DProject.create(file_path=proj_path, width=width, height=height, fps=fps, layer_names=[layer_name])
+        for idx, f_img in enumerate(frames, start=1):
+            proj.add_frame_image(layer_name, idx, f_img)
+        proj.save(proj_path)
+
+        # Generate verification preview filmstrip
+        strip_img, strip_path = proj.generate_preview_strip(frame_count=min(6, fc))
+
+        return json.dumps({
+            "status": "success",
+            "message": f"Successfully generated {len(frames)}-frame '{style}' animation project at {proj_path}",
+            "style": style,
+            "action": action or "default",
+            "frames_count": len(frames),
+            "preview_strip_path": strip_path,
+            "project_summary": proj.inspect_summary()
+        }, indent=2)
+
+    elif name == "pencil2d_get_guide":
+        topic = arguments.get("topic", "")
+        from .guides import get_guide
+        guide_content = get_guide(topic)
+        return guide_content
+
     else:
         return json.dumps({"error": f"Unknown tool: {name}"})
 
@@ -694,7 +893,8 @@ def run_server():
                     "serverInfo": {
                         "name": "pencil2d-mcp",
                         "version": "0.3.0"
-                    }
+                    },
+                    "instructions": SERVER_INSTRUCTIONS
                 }
             })
 

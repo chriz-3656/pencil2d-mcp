@@ -25,7 +25,7 @@ An open-source **Model Context Protocol (MCP)** server and automation toolkit th
 
 ---
 
-## 🛠️ Complete MCP Toolset (14 Tools)
+## 🛠️ Complete MCP Toolset (17 Tools)
 
 Every tool is exposed as a first-class AI tool over MCP:
 
@@ -45,6 +45,9 @@ Every tool is exposed as a first-class AI tool over MCP:
 | **`pencil2d_extract_frames`** | `project_path`, `output_dir` | Unpack all PNG frames from a `.pclx` file into a directory for AI inspection or external editing. |
 | **`pencil2d_export`** | `project_path`, `output_path`, `width`, `height`, `fps`, `start_frame`, `end_frame`, `transparency`, `camera`, `timeout`, `force_pure_python` | Headlessly render an animation project to video (MP4), animated GIF, or PNG sequence (via AppImage CLI or pure-Python fallback). |
 | **`pencil2d_launch_gui`** | `project_path` | Open the project in the visual Pencil2D GUI for interactive editing. |
+| **`pencil2d_look`** | `project_path`, `mode` *(strip, frame)*, `frames`, `frame_count`, `onion_skin`, `output_path` | Visually inspect animation via multi-frame contact sheet filmstrip (with frame numbers and onion skinning) or single frame so the AI verifies its work. |
+| **`pencil2d_generate_animation`** | `project_path`, `style` *(stickman, anime, pencil_sketch, ghibli, doodle)*, `action`, `frame_count`, `fps`, `width`, `height` | Generate complete stylized animations using authentic artistic presets, squash & stretch physics, and curved lines of action. |
+| **`pencil2d_get_guide`** | `topic` *(animation, styles, drawing_techniques)* | Retrieve craft knowledge guides on 2D animation principles, timing charts, squash & stretch volume preservation, and style recipes. |
 
 ---
 

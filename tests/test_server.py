@@ -34,6 +34,9 @@ class TestMCPServer(unittest.TestCase):
         self.assertIn("pencil2d_extract_frames", names)
         self.assertIn("pencil2d_export", names)
         self.assertIn("pencil2d_launch_gui", names)
+        self.assertIn("pencil2d_look", names)
+        self.assertIn("pencil2d_generate_animation", names)
+        self.assertIn("pencil2d_get_guide", names)
 
     def test_create_and_inspect_tools(self):
         create_res_raw = handle_call_tool("pencil2d_create", {
@@ -90,6 +93,64 @@ class TestMCPServer(unittest.TestCase):
         res_raw = handle_call_tool("non_existent_tool", {})
         res = json.loads(res_raw)
         self.assertIn("error", res)
+
+    def test_get_guide_tool(self):
+        guide_text = handle_call_tool("pencil2d_get_guide", {"topic": "animation"})
+        self.assertIn("2D Animation Principles", guide_text)
+        self.assertIn("Squash and Stretch", guide_text)
+
+        styles_text = handle_call_tool("pencil2d_get_guide", {"topic": "styles"})
+        self.assertIn("Dynamic Stickman", styles_text)
+        self.assertIn("Anime & Manga", styles_text)
+        self.assertIn("Studio Ghibli", styles_text)
+
+    def test_generate_animation_and_look_tools(self):
+        # Generate stylized stickman animation
+        gen_res_raw = handle_call_tool("pencil2d_generate_animation", {
+            "project_path": self.project_path,
+            "style": "stickman",
+            "action": "jump",
+            "frame_count": 6
+        })
+        gen_res = json.loads(gen_res_raw)
+        self.assertEqual(gen_res["status"], "success")
+        self.assertEqual(gen_res["frames_count"], 6)
+        self.assertTrue(os.path.exists(self.project_path))
+
+        # Test pencil2d_look in strip mode
+        look_res_raw = handle_call_tool("pencil2d_look", {
+            "project_path": self.project_path,
+            "mode": "strip",
+            "frame_count": 4,
+            "onion_skin": True
+        })
+        look_res = json.loads(look_res_raw)
+        self.assertEqual(look_res["status"], "success")
+        self.assertEqual(look_res["mode"], "strip")
+        self.assertTrue(os.path.exists(look_res["preview_strip_path"]))
+
+        # Test pencil2d_look in single frame mode
+        frame_res_raw = handle_call_tool("pencil2d_look", {
+            "project_path": self.project_path,
+            "mode": "frame",
+            "frame": 2
+        })
+        frame_res = json.loads(frame_res_raw)
+        self.assertEqual(frame_res["status"], "success")
+        self.assertEqual(frame_res["mode"], "frame")
+        self.assertTrue(os.path.exists(frame_res["preview_path"]))
+
+    def test_all_art_styles_generation(self):
+        for style_name in ["anime", "pencil_sketch", "ghibli", "doodle"]:
+            target_proj = os.path.join(self.test_dir, f"test_{style_name}.pclx")
+            res_raw = handle_call_tool("pencil2d_generate_animation", {
+                "project_path": target_proj,
+                "style": style_name,
+                "frame_count": 4
+            })
+            res = json.loads(res_raw)
+            self.assertEqual(res["status"], "success")
+            self.assertTrue(os.path.exists(target_proj))
 
 if __name__ == "__main__":
     unittest.main()

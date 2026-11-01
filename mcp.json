@@ -68,6 +68,18 @@
     {
       "name": "pencil2d_launch_gui",
       "description": "Open a project (or a new workspace) inside the Pencil2D GUI for visual animation editing."
+    },
+    {
+      "name": "pencil2d_look",
+      "description": "Visually inspect the animation by generating an animation filmstrip contact sheet (with frame numbers, timeline indicators, and onion skinning) or a single composited frame."
+    },
+    {
+      "name": "pencil2d_generate_animation",
+      "description": "Generate a complete, high-quality stylized 2D animation project using authentic artistic styles (Stickman martial arts, Anime cel-shaded, Disney-style Pencil Sketch, Studio Ghibli landscape, Hand-drawn Doodle) with squash & stretch physics and curved lines of action."
+    },
+    {
+      "name": "pencil2d_get_guide",
+      "description": "Retrieve craft knowledge guides on 2D animation principles, squash & stretch volume preservation, timing charts, and recipes for Stickman, Anime, Pencil Sketch, Ghibli, and Doodle styles."
     }
   ]
 }

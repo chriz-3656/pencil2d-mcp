@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple, Union
-from PIL import Image
+from PIL import Image, ImageDraw
 
 DEFAULT_APPIMAGE_SEARCH_PATHS = [
     "/home/demo/Downloads/pencil2d-linux-amd64-v0.7.2.AppImage",
@@ -741,6 +741,76 @@ class Pencil2DProject:
             disposal=2
         )
         return True
+
+    def generate_preview_strip(self, frames: Optional[List[int]] = None,
+                               frame_count: int = 6, thumb_width: int = 240,
+                               onion_skin: bool = False,
+                               output_path: Optional[str] = None) -> Tuple[Image.Image, str]:
+        """Generate a visual verification filmstrip (contact sheet) of key animation frames."""
+        max_f = max([max(l["frames"].keys()) for l in self.layers if l.get("frames")] or [1])
+        start_f = max(1, self.mark_in)
+        end_f = max(start_f, max(max_f, self.mark_out))
+
+        if frames:
+            sample_frames = sorted(list(set(frames)))
+        else:
+            fc = max(2, min(frame_count, end_f - start_f + 1))
+            if end_f == start_f:
+                sample_frames = [start_f]
+            else:
+                step = (end_f - start_f) / float(fc - 1)
+                sample_frames = sorted(list(set([round(start_f + i * step) for i in range(fc)])))
+
+        # Determine thumbnail dimensions
+        aspect = self.height / float(max(1, self.width))
+        tw = thumb_width
+        th = int(tw * aspect)
+        header_h = 24
+        pad = 12
+
+        total_w = pad + len(sample_frames) * (tw + pad)
+        total_h = pad * 2 + th + header_h
+
+        strip = Image.new("RGBA", (total_w, total_h), (24, 24, 30, 255))
+        draw = ImageDraw.Draw(strip)
+
+        for idx, f_num in enumerate(sample_frames):
+            x = pad + idx * (tw + pad)
+            y = pad
+
+            # Frame card background
+            draw.rectangle([x, y, x + tw, y + th + header_h], fill=(36, 36, 46, 255), outline=(55, 55, 70, 255))
+
+            # Header badge with frame index
+            draw.rectangle([x, y, x + tw, y + header_h], fill=(48, 48, 62, 255))
+            label = f"Frame {f_num}"
+            draw.text((x + 8, y + 4), label, fill=(225, 225, 235, 255))
+
+            # Render frame
+            curr_frame = self.render_frame(f_num)
+
+            # Optional onion skinning (blend previous frame at 30% opacity in cool tint)
+            if onion_skin and f_num > start_f:
+                prev_frame = self.render_frame(f_num - 1)
+                onion = prev_frame.convert("RGBA")
+                r, g, b, a = onion.split()
+                a = a.point(lambda p: int(p * 0.35))
+                onion.putalpha(a)
+                curr_frame = Image.alpha_composite(curr_frame, onion)
+
+            # Resize to thumbnail
+            thumb = curr_frame.resize((tw, th), Image.Resampling.LANCZOS)
+            strip.paste(thumb, (x, y + header_h), thumb)
+
+        if not output_path:
+            import tempfile
+            fd, output_path = tempfile.mkstemp(prefix="pencil2d_strip_", suffix=".png")
+            os.close(fd)
+
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        strip.save(output_path, format="PNG")
+        return strip, output_path
+
 
 def export_project(project_path: str, output_path: str,
                    width: Optional[int] = None, height: Optional[int] = None,
