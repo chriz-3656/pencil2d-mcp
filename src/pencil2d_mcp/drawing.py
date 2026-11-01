@@ -304,3 +304,87 @@ def draw_impact_spark(canvas: Image.Image, center: Tuple[float, float],
         pts.append((x, y))
     if len(pts) >= 3:
         draw.polygon(pts, fill=color, outline=(255, 255, 255, 255))
+
+
+# -------------------------------------------------------------------------
+# Advanced Sakuga Stickman Combat & Motion Smears
+# -------------------------------------------------------------------------
+
+def draw_motion_smear(canvas: Image.Image, p_prev: Tuple[float, float],
+                      p_curr: Tuple[float, float],
+                      width_start: float = 6.0, width_end: float = 3.0,
+                      color: Tuple[int, int, int, int] = (255, 255, 255, 180)):
+    """Draw an elongated motion smear connecting previous limb position to current."""
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    dx = p_curr[0] - p_prev[0]
+    dy = p_curr[1] - p_prev[1]
+    dist = math.hypot(dx, dy)
+    if dist < 5.0:
+        return
+
+    nx = -dy / dist
+    ny = dx / dist
+
+    poly = [
+        (p_prev[0] - nx * width_start * 0.5, p_prev[1] - ny * width_start * 0.5),
+        (p_prev[0] + nx * width_start * 0.5, p_prev[1] + ny * width_start * 0.5),
+        (p_curr[0] + nx * width_end * 0.5, p_curr[1] + ny * width_end * 0.5),
+        (p_curr[0] - nx * width_end * 0.5, p_curr[1] - ny * width_end * 0.5)
+    ]
+    draw.polygon(poly, fill=color)
+
+
+def draw_arc_smear_wedge(canvas: Image.Image, pivot: Tuple[float, float],
+                         tip_prev: Tuple[float, float], tip_curr: Tuple[float, float],
+                         color: Tuple[int, int, int, int] = (255, 230, 100, 160),
+                         steps: int = 12):
+    """Draw a dynamic curved fan/wedge motion smear for high-velocity kicks or blade swings."""
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    pts = [pivot]
+
+    # Sample arc from tip_prev to tip_curr
+    for s in range(steps + 1):
+        t = s / float(steps)
+        # Interpolate along arc
+        x = tip_prev[0] * (1.0 - t) + tip_curr[0] * t
+        y = tip_prev[1] * (1.0 - t) + tip_curr[1] * t
+        pts.append((x, y))
+
+    if len(pts) >= 3:
+        draw.polygon(pts, fill=color)
+
+
+def draw_sakuga_impact_flash(canvas: Image.Image, center: Tuple[float, float],
+                             radius: float = 280.0,
+                             invert_colors: bool = False):
+    """Apply high-contrast Sakuga impact frame with radial speed rays."""
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    cx, cy = center
+    w, h = canvas.size
+
+    if invert_colors:
+        # Dramatic stark monochrome / negative frame
+        flash_bg = Image.new("RGBA", (w, h), (15, 12, 18, 240))
+        canvas.paste(flash_bg, (0, 0), flash_bg)
+
+    # Concentric explosive energy rays
+    rays = 16
+    for i in range(rays):
+        angle = (i / float(rays)) * 2.0 * math.pi
+        p1 = (cx + math.cos(angle) * (radius * 0.2), cy + math.sin(angle) * (radius * 0.2))
+        p2 = (cx + math.cos(angle) * radius, cy + math.sin(angle) * radius)
+        draw.line([p1, p2], fill=(255, 255, 255, 230), width=3)
+        draw.line([p1, p2], fill=(255, 210, 80, 140), width=7)
+
+
+def apply_camera_shake(canvas: Image.Image, dx: float, dy: float,
+                       fill_color: Tuple[int, int, int, int] = (24, 20, 26, 255)) -> Image.Image:
+    """Offset the entire canvas to simulate dynamic camera shake impact."""
+    if abs(dx) < 0.5 and abs(dy) < 0.5:
+        return canvas
+
+    w, h = canvas.size
+    shaken = Image.new("RGBA", (w, h), fill_color)
+    shaken.paste(canvas, (int(round(dx)), int(round(dy))))
+    return shaken
+
