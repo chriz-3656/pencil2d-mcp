@@ -4,7 +4,7 @@ Author: chriz-3656
 License: MIT
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "chriz-3656"
 
 from .core import Pencil2DProject, export_project, render_animation, launch_gui, get_appimage_path
